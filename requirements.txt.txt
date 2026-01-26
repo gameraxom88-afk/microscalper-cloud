@@ -1,0 +1,5 @@
+flask
+requests
+websockets
+pyotp
+python-dotenv
