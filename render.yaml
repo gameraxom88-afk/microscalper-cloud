@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: micro-scalper-pro
+    env: python
+    region: singapore  # For lower latency to Indian markets
+    plan: free  # Start with free plan
+    
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      echo "✅ Dependencies installed"
+    
+    startCommand: |
+      python main_render.py
+    
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 8000
+      - key: RENDER
+        value: true
+      - key: TZ
+        value: Asia/Kolkata
+    
+    healthCheckPath: /api/status
+    autoDeploy: true
+    
+    # For Flattrade webhooks
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    
+    disk:
+      name: trading-data
+      mountPath: /data
+      sizeGB: 1 
