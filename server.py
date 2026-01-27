@@ -1,4 +1,4 @@
-import os, time, threading, requests
+import os, time, threading, requests, hashlib
 from flask import Flask, request, redirect, render_template_string, jsonify
 
 # ================= CONFIG =================
@@ -7,7 +7,6 @@ SECRET = os.getenv("FLATTRADE_SECRET")
 CLIENT_ID = os.getenv("CLIENT_ID")
 REDIRECT_URL = os.getenv("REDIRECT_URL")
 
-BASE = "https://piconnect.flattrade.in/PiConnectTP"
 ACCESS_TOKEN = None
 position = {}
 
@@ -16,48 +15,44 @@ app = Flask(__name__)
 # ================= LOGIN =================
 @app.route("/login")
 def login():
-    url = (
-        "https://auth.flattrade.in/?app_key="
-        + API_KEY
-        + "&redirect_uri="
-        + REDIRECT_URL
-        + "&response_type=code"
-    )
+    url = f"https://auth.flattrade.in/?app_key={API_KEY}&redirect_uri={REDIRECT_URL}&response_type=code"
     return redirect(url)
 
-# ================= REDIRECT ROUTE FIX =================
-# Flexible route: ? ya / issue solve
+# ================= REDIRECT ROUTE =================
 @app.route("/redirect", defaults={'extra': ''})
 @app.route("/redirect/<path:extra>")
 def redirect_route(extra):
     global ACCESS_TOKEN
-    code = request.args.get("code")
-    if not code:
-        return "Error: No code received from Flattrade", 400
+    request_code = request.args.get("request_code")
+    if not request_code:
+        return "Error: No request_code received", 400
+
+    # SHA256 hash of (api_key + request_code + secret)
+    api_secret_hash = hashlib.sha256((API_KEY + request_code + SECRET).encode()).hexdigest()
+
+    payload = {
+        "api_key": API_KEY,
+        "request_code": request_code,
+        "api_secret": api_secret_hash
+    }
 
     try:
-        r = requests.post(
-            f"{BASE}/token",
-            json={
-                "api_key": API_KEY,
-                "secret_key": SECRET,
-                "request_code": code
-            }
-        )
-        ACCESS_TOKEN = r.json().get("access_token")
+        r = requests.post("https://authapi.flattrade.in/trade/apitoken", json=payload)
+        r.raise_for_status()
+        ACCESS_TOKEN = r.json().get("token")
         if not ACCESS_TOKEN:
-            return "Error: No access token received", 500
+            return f"Error: No access token received. Response: {r.text}", 500
     except Exception as e:
         return f"Token request failed: {e}", 500
 
-    return redirect("/")  # login ke baad home/UI
+    return redirect("/")
 
 # ================= FLATTRADE =================
 def headers():
     return {"Authorization": ACCESS_TOKEN}
 
 def get_ltp(symbol):
-    r = requests.get(f"{BASE}/GetLTP", params={"token": symbol}, headers=headers())
+    r = requests.get(f"https://piconnect.flattrade.in/PiConnectTP/GetLTP", params={"token": symbol}, headers=headers())
     return float(r.json()["lp"])
 
 def place_order(symbol, side, qty=25):
@@ -73,7 +68,7 @@ def place_order(symbol, side, qty=25):
         "prctyp": "MKT",
         "ret": "DAY"
     }
-    requests.post(f"{BASE}/PlaceOrder", json=payload, headers=headers())
+    requests.post(f"https://piconnect.flattrade.in/PiConnectTP/PlaceOrder", json=payload, headers=headers())
 
 # ================= TSL ENGINE =================
 def tsl_engine(symbol, entry):
@@ -95,7 +90,7 @@ def tsl_engine(symbol, entry):
             position["open"] = False
             break
 
-        # Update trailing stop (simple example)
+        # Simple trailing stop update
         if ltp - prev > 1:  # price moved up
             tsl = (tsl or entry) + 1
 
