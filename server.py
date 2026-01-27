@@ -25,22 +25,28 @@ def login():
     )
     return redirect(url)
 
-@app.route("/callback")
-def callback():
+# =============== REDIRECT ROUTE FIX ===============
+@app.route("/redirect")
+def redirect_route():
     global ACCESS_TOKEN
     code = request.args.get("code")
+    if not code:
+        return "Error: No code received from Flattrade", 400
 
-    r = requests.post(
-        f"{BASE}/token",
-        json={
-            "api_key": API_KEY,
-            "secret_key": SECRET,
-            "request_code": code
-        }
-    )
+    try:
+        r = requests.post(
+            f"{BASE}/token",
+            json={
+                "api_key": API_KEY,
+                "secret_key": SECRET,
+                "request_code": code
+            }
+        )
+        ACCESS_TOKEN = r.json()["access_token"]
+    except Exception as e:
+        return f"Token request failed: {e}", 500
 
-    ACCESS_TOKEN = r.json()["access_token"]
-    return redirect("/")
+    return redirect("/")  # login ke baad UI pe redirect
 
 # ================= FLATTRADE =================
 
@@ -73,7 +79,7 @@ def tsl_engine(symbol, entry):
     phase1, phase2 = entry + 2, entry + 5
     tsl, high, prev, spike = None, entry, None, False
 
-    while position["open"]:
+    while position.get("open", False):
         ltp = get_ltp(symbol)
         if ltp <= hard_sl:
             place_order(symbol, "SELL")
