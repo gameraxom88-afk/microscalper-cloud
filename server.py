@@ -1,6 +1,7 @@
-import os, time, threading, requests, pandas as pd
+import os, time, threading, requests
 from flask import Flask, request, redirect, render_template_string, jsonify
 
+# ================= CONFIG =================
 API_KEY = os.getenv("FLATTRADE_API_KEY")
 SECRET = os.getenv("FLATTRADE_SECRET")
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -13,7 +14,6 @@ position = {}
 app = Flask(__name__)
 
 # ================= LOGIN =================
-
 @app.route("/login")
 def login():
     url = (
@@ -25,9 +25,11 @@ def login():
     )
     return redirect(url)
 
-# =============== REDIRECT ROUTE FIX ===============
-@app.route("/redirect")
-def redirect_route():
+# ================= REDIRECT ROUTE FIX =================
+# Flexible route: ? ya / issue solve
+@app.route("/redirect", defaults={'extra': ''})
+@app.route("/redirect/<path:extra>")
+def redirect_route(extra):
     global ACCESS_TOKEN
     code = request.args.get("code")
     if not code:
@@ -42,14 +44,15 @@ def redirect_route():
                 "request_code": code
             }
         )
-        ACCESS_TOKEN = r.json()["access_token"]
+        ACCESS_TOKEN = r.json().get("access_token")
+        if not ACCESS_TOKEN:
+            return "Error: No access token received", 500
     except Exception as e:
         return f"Token request failed: {e}", 500
 
-    return redirect("/")  # login ke baad UI pe redirect
+    return redirect("/")  # login ke baad home/UI
 
 # ================= FLATTRADE =================
-
 def headers():
     return {"Authorization": ACCESS_TOKEN}
 
@@ -72,31 +75,35 @@ def place_order(symbol, side, qty=25):
     }
     requests.post(f"{BASE}/PlaceOrder", json=payload, headers=headers())
 
-# ================= TSL =================
-
+# ================= TSL ENGINE =================
 def tsl_engine(symbol, entry):
     hard_sl = entry - 5
-    phase1, phase2 = entry + 2, entry + 5
-    tsl, high, prev, spike = None, entry, None, False
+    tsl, prev = None, entry
 
     while position.get("open", False):
         ltp = get_ltp(symbol)
+
+        # Hard stop-loss
         if ltp <= hard_sl:
             place_order(symbol, "SELL")
             position["open"] = False
             break
 
+        # Trailing stop-loss
         if tsl and ltp <= tsl:
             place_order(symbol, "SELL")
             position["open"] = False
             break
+
+        # Update trailing stop (simple example)
+        if ltp - prev > 1:  # price moved up
+            tsl = (tsl or entry) + 1
 
         position.update({"ltp": ltp, "tsl": tsl})
         prev = ltp
         time.sleep(1)
 
 # ================= UI =================
-
 HTML = """
 <h2>🚀 MicroScalper</h2>
 
@@ -134,7 +141,7 @@ def buy():
     s = request.json["symbol"]
     entry = get_ltp(s)
     place_order(s, "BUY")
-    position.update({"entry": entry, "ltp": entry, "open": True})
+    position.update({"entry": entry, "ltp": entry, "tsl": None, "open": True})
     threading.Thread(target=tsl_engine, args=(s, entry)).start()
     return jsonify(ok=True)
 
@@ -142,4 +149,7 @@ def buy():
 def status():
     return jsonify(position)
 
-app.run(host="0.0.0.0", port=10000)
+# ================= RUN APP =================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
