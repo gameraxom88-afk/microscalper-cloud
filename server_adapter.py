@@ -125,4 +125,15 @@ class ServerTradingAdapter:
             "status": "running" if self.initialized else "stopped",
             "initialized": self.initialized,
             "timestamp": asyncio.get_event_loop().time()
+
         }
+        @app.route("/manual", methods=["GET"])
+def manual():
+    sample_data = {
+        "symbol": "NIFTY",
+        "side": "BUY",
+        "qty": 1
+    }
+    handle_trade(sample_data)
+    return "MANUAL TRADE TRIGGERED"
+        
