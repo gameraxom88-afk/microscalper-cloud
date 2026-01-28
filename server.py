@@ -26,7 +26,6 @@ def login():
     if not API_KEY or not REDIRECT_URL:
         return "Error: API_KEY or REDIRECT_URL not configured", 500
     
-    # Flattrade auth URL
     url = f"https://auth.flattrade.in/?app_key={API_KEY}&redirect_uri={REDIRECT_URL}&response_type=code"
     print(f"Redirecting to: {url}")
     return redirect(url)
@@ -42,7 +41,6 @@ def redirect_route():
     print(f"Query params: {request.args}")
     print("="*50)
     
-    # Flattrade se 'code' parameter mein aata hai
     request_code = request.args.get("code") or request.args.get("request_code")
     
     if not request_code:
@@ -52,7 +50,6 @@ def redirect_route():
         <p>Full URL: {request.url}</p>
         """, 400
 
-    # SHA256 hash of (api_key + request_code + secret)
     api_secret_hash = hashlib.sha256((API_KEY + request_code + SECRET).encode()).hexdigest()
 
     payload = {
@@ -90,11 +87,9 @@ def redirect_route():
         <a href="/">Go Home</a>
         """, 500
 
-    # Success - redirect to home
     return redirect("/")
 
-# [Rest of your code remains same - get_ltp, place_order, tsl_engine, etc.]
-# ================= FLATTRADE =================
+# ================= FLATTRADE HELPERS =================
 def headers():
     return {"Authorization": ACCESS_TOKEN}
 
@@ -125,25 +120,30 @@ def tsl_engine(symbol, entry):
     while position.get("open", False):
         ltp = get_ltp(symbol)
 
-        # Hard stop-loss
         if ltp <= hard_sl:
             place_order(symbol, "SELL")
             position["open"] = False
             break
 
-        # Trailing stop-loss
         if tsl and ltp <= tsl:
             place_order(symbol, "SELL")
             position["open"] = False
             break
 
-        # Simple trailing stop update
-        if ltp - prev > 1:  # price moved up
+        if ltp - prev > 1:
             tsl = (tsl or entry) + 1
 
         position.update({"ltp": ltp, "tsl": tsl})
         prev = ltp
         time.sleep(1)
+
+# ================= POSTBACK ROUTE =================
+@app.route("/postback", methods=["POST"])
+def postback():
+    data = request.json
+    print("POSTBACK received:", data)
+    # Aap yahan further logic daal sakte ho jaise order execution ya logging
+    return jsonify({"status": "ok", "message": "Webhook received successfully"})
 
 # ================= UI =================
 HTML = """
