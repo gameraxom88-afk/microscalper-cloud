@@ -1,6 +1,6 @@
-from flask import Flask, request, jsonify, render_template_string, redirect
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
-import os, json, time, requests, threading
+import os, json, time, requests
 from datetime import datetime
 
 # ================= INIT =================
@@ -12,7 +12,6 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 CLIENT_ID = os.getenv("CLIENT_ID", "FZ26135")
 API_KEY = os.getenv("FLATTRADE_API_KEY")
 SECRET = os.getenv("FLATTRADE_SECRET")
-
 REDIRECT_URL = os.getenv(
     "REDIRECT_URL",
     "https://niftyscalping.onrender.com/redirect"
@@ -27,19 +26,14 @@ token_expiry = 0
 connected_clients = {}
 
 # =====================================================
-# 🔑 FLATTRADE OAUTH LOGIN (ONLY VALID METHOD)
+# 🔑 FLATTRADE OAUTH LOGIN
 # =====================================================
-
 def save_token(token):
     global current_token, token_expiry
     current_token = token
     token_expiry = time.time() + 6 * 60 * 60
-
     with open(TOKEN_FILE, "w") as f:
-        json.dump({
-            "token": token,
-            "expiry": token_expiry
-        }, f)
+        json.dump({"token": token, "expiry": token_expiry}, f)
 
 def load_token():
     global current_token, token_expiry
@@ -63,43 +57,32 @@ def get_valid_token():
 @app.route("/redirect")
 def flattrade_redirect():
     code = request.args.get("code")
-
     if not code:
         return "❌ No auth code received"
 
     token_url = "https://authapi.flattrade.in/ftauth/token"
+    payload = {"api_key": API_KEY, "secret_key": SECRET, "code": code}
 
-    payload = {
-        "api_key": API_KEY,
-        "secret_key": SECRET,
-        "code": code
-    }
-
-    r = requests.post(token_url, json=payload, timeout=10)
-    data = r.json()
+    try:
+        r = requests.post(token_url, json=payload, timeout=10)
+        data = r.json()
+    except Exception as e:
+        return f"❌ Token request failed: {e}"
 
     if "access_token" in data:
         save_token(data["access_token"])
-
-        socketio.emit("login_success", {
-            "client_id": CLIENT_ID,
-            "status": "logged_in"
-        })
-
-        return """
-        <h2>✅ Flattrade Login Successful</h2>
-        <p>You can close this window and return to Electron App</p>
-        """
+        socketio.emit("login_success", {"client_id": CLIENT_ID, "status": "logged_in"})
+        return "<h2>✅ Flattrade Login Successful</h2><p>You can close this window and return to Electron App</p>"
 
     return f"❌ Token Error: {data}"
 
 # =====================================================
-# 📩 STEP 2: POSTBACK (MANDATORY FOR FLATTRADE)
+# 📩 STEP 2: POSTBACK
 # =====================================================
 @app.route("/postback", methods=["POST"])
 def flattrade_postback():
     data = request.json or request.form
-    print("📩 FLATTRADE POSTBACK:", data)
+    app.logger.info("📩 FLATTRADE POSTBACK: %s", data)
     return jsonify({"status": "ok"})
 
 # =====================================================
@@ -107,18 +90,11 @@ def flattrade_postback():
 # =====================================================
 @socketio.on("start_login")
 def start_login():
-    login_url = (
-        "https://auth.flattrade.in/?"
-        f"app_key={API_KEY}"
-        f"&redirect_uri={REDIRECT_URL}"
-    )
-
-    emit("login_url", {
-        "url": login_url
-    })
+    login_url = f"https://auth.flattrade.in/?app_key={API_KEY}&redirect_uri={REDIRECT_URL}"
+    emit("login_url", {"url": login_url})
 
 # =====================================================
-# 📈 ORDER PLACEMENT (UNCHANGED)
+# 📈 ORDER PLACEMENT
 # =====================================================
 def place_flattrade_order(symbol, side, qty, order_type="MARKET", price=0):
     token = get_valid_token()
@@ -131,19 +107,26 @@ def place_flattrade_order(symbol, side, qty, order_type="MARKET", price=0):
         "exch": "NFO",
         "tsym": symbol,
         "qty": str(qty),
-        "prc": "0",
         "prd": "M",
-        "trantype": "B" if side == "BUY" else "S",
-        "prctyp": "MKT",
+        "trantype": "B" if side.upper() == "BUY" else "S",
+        "prctyp": order_type.upper(),  # MARKET or LIMIT
         "ret": "DAY",
         "token": token
     }
 
-    r = requests.post(f"{BASE_URL}/PlaceOrder", json=payload)
-    return r.json()
+    if order_type.upper() == "LIMIT":
+        payload["prc"] = str(price)
+    else:
+        payload["prc"] = "0"
+
+    try:
+        r = requests.post(f"{BASE_URL}/PlaceOrder", json=payload, timeout=10)
+        return r.json()
+    except Exception as e:
+        return {"error": f"Order request failed: {e}"}
 
 # =====================================================
-# 🌐 SOCKET EVENTS (UNCHANGED)
+# 🌐 SOCKET EVENTS
 # =====================================================
 @socketio.on("connect")
 def on_connect():
@@ -155,7 +138,9 @@ def on_place_order(data):
     res = place_flattrade_order(
         data["symbol"],
         data["side"],
-        data["qty"]
+        data["qty"],
+        data.get("order_type", "MARKET"),
+        data.get("price", 0)
     )
     emit("order_response", res)
 
@@ -172,6 +157,13 @@ def status():
     })
 
 # =====================================================
+# 🏠 HOME
+# =====================================================
+@app.route("/")
+def home():
+    return "🚀 MicroScalper Server Running", 200
+
+# =====================================================
 # 🚀 START SERVER
 # =====================================================
 if __name__ == "__main__":
@@ -181,14 +173,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", 10000)),
         allow_unsafe_werkzeug=True
     )
-@app.route("/")
-def home():
-    return "MicroScalper Backend Running OK", 200
-
-@app.route("/")
-def home():
-    return "🚀 MicroScalper Server Running"
-
-
-
-
