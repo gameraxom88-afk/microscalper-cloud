@@ -185,6 +185,10 @@ if __name__ == "__main__":
 def home():
     return "MicroScalper Backend Running OK", 200
 
+@app.route("/")
+def home():
+    return "🚀 MicroScalper Server Running"
+
 
 
 
