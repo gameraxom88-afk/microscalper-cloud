@@ -7,7 +7,7 @@ from datetime import datetime
 # ========== INIT ==========
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'microscalper_secret_2026'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # ========== CONFIG ==========
 CLIENT_ID = os.getenv("CLIENT_ID", "FT00000")  # Your Flattrade Client ID
@@ -512,4 +512,6 @@ if __name__ == "__main__":
         print(f"⚠️  Auto-login failed. Manual login required.")
     
     # Run server
-    socketio.run(app, host="0.0.0.0", port=10000, debug=False)
+    port = int(os.environ.get("PORT", 10000))
+    print(f"🚀 Server starting on port: {port}")
+    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
