@@ -1,7 +1,23 @@
-services:
-  - type: web
-    name: microscalper
-    env: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
+{
+  "name": "microscalper-pro",
+  "env": "python",
+  "python": {
+    "version": "3.9.0"
+  },
+  "buildCommand": "pip install -r requirements.txt",
+  "startCommand": "python server.py",
+  "envVars": [
+    {
+      "key": "CLIENT_ID",
+      "value": "YOUR_FLATTRADE_CLIENT_ID"
+    },
+    {
+      "key": "FLATTRADE_API_KEY",
+      "value": "YOUR_API_KEY"
+    },
+    {
+      "key": "FLATTRADE_SECRET", 
+      "value": "YOUR_SECRET"
+    }
+  ]
+}
