@@ -175,13 +175,16 @@ def status():
 # 🚀 START SERVER
 # =====================================================
 if __name__ == "__main__":
-    print("🚀 MicroScalper Server Started")
-    load_token()
-socketio.run(
-    app,
-    host="0.0.0.0",
-    port=int(os.getenv("PORT", 10000)),
-    allow_unsafe_werkzeug=True
-)
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 10000)),
+        allow_unsafe_werkzeug=True
+    )
+@app.route("/")
+def home():
+    return "MicroScalper Backend Running OK", 200
+
+
 
 
