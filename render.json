@@ -1,11 +1,17 @@
-{
-  "name": "microscalper-pro",
-  "env": "python",
-  "buildCommand": "pip install -r requirements.txt",
-  "startCommand": "python server.py",
-  "envVars": [
-    { "key": "CLIENT_ID", "sync": false },
-    { "key": "FLATTRADE_API_KEY", "sync": false },
-    { "key": "FLATTRADE_SECRET", "sync": false }
-  ]
-}
+services:
+  - type: web
+    name: microscalper-pro
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: CLIENT_ID
+        value: FZ26135
+      - key: FLATTRADE_API_KEY
+        value: your_api_key_here
+      - key: FLATTRADE_SECRET
+        value: your_secret_here
+      - key: REDIRECT_URL
+        value: https://niftyscalping.onrender.com/redirect
+      - key: PORT
+        value: 10000
